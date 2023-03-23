@@ -1,10 +1,12 @@
 import curses
+import importlib
 import os
 import pytz
 import re
 import requests
 import sys
 import time
+import configparser
 
 from bs4 import BeautifulSoup
 from datetime import datetime as dt
@@ -20,8 +22,109 @@ from .utils import (
     Status
 )
 
+def infer_year():
+    selected = 2015
+    for y in range(2015, dt.now().year + 1):
+        if os.path.exists(f'{y}/'):
+            selected = y
+    return f'{selected:04}'
+
+def infer_day(year):
+    selected = 0
+    for d in range(1, 26):
+        
+        path = f'{year}/{d:02}/'
+        if os.path.exists(path):
+            selected = d
+        else:
+            break
+    return f'{selected:02}'
+
+def load_configuration():
+    lconfig = configparser.ConfigParser()
+    lconfig.read('aoc_cli_config.ini')
+    if 'DEFAULT' not in lconfig:
+        lconfig['DEFAULT'] = {}
+    if 'year' not in lconfig['DEFAULT']:
+        lconfig['DEFAULT']['year'] = infer_year()
+    if 'day' not in lconfig['DEFAULT']:
+        lconfig['DEFAULT']['day'] = infer_day(lconfig['DEFAULT']['year'])
+    lconfig.write(open('aoc_cli_config.ini', 'w'))
+    print("Year: " + lconfig['DEFAULT']['year'])
+    print("Day: " + lconfig['DEFAULT']['day'])
+    return lconfig
+    
+
+my_config = load_configuration()
+selected_year = my_config['DEFAULT']['year']
+selected_day = my_config['DEFAULT']['day']
+def raw_set_year(year):
+    globals()['selected_year'] = year
+    my_config.set('DEFAULT', 'year', year)
+    my_config.write(open('aoc_cli_config.ini', 'w'))
+
+def raw_set_day(day):
+    globals()['selected_day'] = day
+    my_config.set('DEFAULT', 'day', day)
+    my_config.write(open('aoc_cli_config.ini', 'w'))
+
+
+def raw_get_year():
+    return globals()['selected_year']
+def raw_get_day():
+    return globals()['selected_day']
+
+
+def set_year(year):
+    if isinstance(year, int):    
+        year = f'{year}'
+    raw_set_year(year)
+
+    #os.environ['ADVENT_CLI_YEAR'] = year
+
+    print(f'Selected year: {year}')
+    path = f'{year}/'
+    
+    if not os.path.exists(path):
+        os.makedirs(path)
+    day = '00'
+    for d in range(1, 26):
+        path = f'{year}/{d:02}/'
+        if os.path.exists(path):
+            day = f'{d:02}'
+        else:
+            break
+    set_day(day)
+
+def set_day(day):
+    if isinstance(day, int):        
+        day = f'{day:02}'
+    raw_set_day(day)
+    print(f'Selected day: {day}')
+
+def get_year():
+    return raw_get_year()
+def get_day():
+    return raw_get_day()
+
+
 
 def get(year, day):
+    if not year:
+        year = get_year()
+    if not day:
+        day = int(get_day())
+        if day == 25:
+            print("Completed all days for this year!")
+            return
+        day += 1
+        day = f'{day:02}'
+        
+    set_day(day)
+    
+    
+
+    template = importlib.resources.read_text('advent_cli', 'template.txt')
     if os.path.exists(f'{year}/{day}/'):
         print(colored('Directory already exists:', 'red'))
         print(colored(f'  {os.getcwd()}/{year}/{day}/', 'red'))
@@ -61,22 +164,19 @@ def get(year, day):
         f.write(custom_markdownify(part1_html))
     print(f'Downloaded prompt to {year}/{day}/prompt.md')
 
+    
+
     r = requests.get(f'https://adventofcode.com/{year}/day/{int(day)}/input',
                      cookies={'session': conf['session_cookie']})
     with open(f'{year}/{day}/input.txt', 'w') as f:
         f.write(r.text)
     print(f'Downloaded input to {year}/{day}/input.txt')
 
-    open(f'{year}/{day}/example_input.txt', 'w').close()
-    print(f'Created {year}/{day}/example_input.txt')
-
     with open(f'{year}/{day}/solution.py', 'w') as f:
         f.write(f'## advent of code {year}\n'
                 f'## https://adventofcode.com/{year}\n'
-                f'## day {day}\n\n'
-                'def parse_input(lines):\n    pass\n\n'
-                'def part1(data):\n    pass\n\n'
-                'def part2(data):\n    pass')
+                f'## day {day}\n\n')
+        f.write(template)
     print(f'Created {year}/{day}/solution.py')
 
 
@@ -204,20 +304,18 @@ def private_leaderboard_stats(year):
                       'a comma-separated list of private leaderboard IDs.', 'red'))
 
 
-def test(year, day, solution_file='solution', example=False):
+def test(year, day, solution_file='solution', example=False, part='0'):
+    part = int(part)
+    print("Testing part ", part)
+    if (year == None):
+        year = get_year()
+    if (day == None):
+        day = get_day()
 
     if not os.path.exists(f'{year}/{day}/'):
         print(colored('Directory does not exist:', 'red'))
         print(colored(f'  "{os.getcwd()}/{year}/{day}/"', 'red'))
         return
-
-    if example:
-        if os.stat(f'{year}/{day}/example_input.txt').st_size == 0:
-            print(colored('Example input file is empty:', 'red'))
-            print(colored(f'  {os.getcwd()}/{year}/{day}/example_input.txt', 'red'))
-            return
-        else:
-            print(colored('(Using example input)', 'red'))
 
     if solution_file != 'solution':
         if not os.path.exists(f'{year}/{day}/{solution_file}.py'):
@@ -226,26 +324,127 @@ def test(year, day, solution_file='solution', example=False):
             return
         print(colored(f'(Using {solution_file}.py)', 'red'))
 
-    part1_answer, part2_answer = compute_answers(year, day,
-                                                 solution_file=solution_file,
-                                                 example=example)
-    if part1_answer is not None:
-        print(f'{colored("Part 1:", "cyan")} {part1_answer}')
+    if not example:
+        with open(f'{year}/{day}/input.txt', 'r') as f:
+            input = [
+                line.replace('\r', '').replace('\n', '') for line in f.readlines()
+            ]
+        part1_answer, part2_answer, part1_time, part2_time = compute_answers(year, day, input,
+                                                    solution_file=solution_file,
+                                                    example=example, part=part)
+        if part1_answer is not None:
+            print(f'{colored("Part 1 (Time: {}ms):".format(part1_time), "cyan")} {part1_answer}')
         if part2_answer is not None:
-            print(f'{colored("Part 2:", "yellow")} {part2_answer}')
+            print(f'{colored("Part 2(Time: {}ms):".format(part2_time), "yellow")} {part2_answer}')
+        if part1_answer is None and part2_answer is None:
+            print(colored('No solution implemented', 'red'))
+            return
     else:
-        print(colored('No solution implemented', 'red'))
-        return
+        path = f'{year}/{day}/'
+        failed = False
+
+        for filename in os.listdir(path):
+            if filename.startswith("test_part1_"):
+                if part == 2:
+                    continue
+                test_part = 1
+            elif filename.startswith("test_part2_"):
+                if part == 1:
+                    continue
+                test_part = 2
+            else:
+                continue
+
+            print(f'{colored("Executing with test input file {}".format(filename), "yellow")}')
+
+            with open(f'{year}/{day}/{filename}', 'r') as f:
+                lines = f.readlines()                
+                lines.pop(0)
+                expected_result = lines.pop(0).strip()
+                lines.pop(0)
+                                
+                input = [line.replace('\r', '').replace('\n', '') for line in lines]
+                                
+                part1_answer, part2_answer, part1_time, part2_time = compute_answers(year, day, input,
+                                                    solution_file=solution_file,
+                                                    example=example,
+                                                    part = test_part)
+                if part1_answer is not None:
+                    print(f'{colored("Part 1 (Time: {}ms):".format(part1_time), "cyan")} {part1_answer}')
+                    if test_part == 1:
+                        if expected_result == str(part1_answer):
+                            print(f'{colored("Part 1 Output {} matches expected input {}".format(part1_answer, expected_result), "green")}')
+                        else:
+                            failed = True
+                            print(f'{colored("Part 2 Output {} does NOT match expected input {}".format(part1_answer, expected_result), "red")}')
+                            
+                elif test_part == 1:
+                    print(colored('No Solution implemented for part 1', 'red'))
+                if part2_answer is not None:
+                    print(f'{colored("Part 2(Time: {}ms):".format(part2_time), "yellow")} {part2_answer}')
+                    if test_part == 2:
+                        if expected_result == str(part2_answer):
+                            print(f'{colored("Part 2 Output {} matches expected input {}".format(part2_answer, expected_result), "green")}')
+                        else:
+                            failed = True
+                            print(f'{colored("Part 2 Output {} does NOT match expected input {}".format(part2_answer, expected_result), "red")}')
+        if failed:
+            print(colored('!!!!!TEST FAILED!!!!!', 'red'))
+        else:
+            print(colored('*****ALL TESTS PASSED*****', 'green'))
+
 
     if solution_file != 'solution':
-        part1_answer_orig, part2_answer_orig = compute_answers(year, day, example=example)
+        part1_answer_orig, part2_answer_orig, part1_time_orig, part2_time_orig = compute_answers(year, day, example=example)
         if part1_answer == part1_answer_orig and part2_answer == part2_answer_orig:
             print(colored('Output matches solution.py', 'green'))
         else:
             print(colored('Output does not match solution.py', 'red'))
 
+def record_result(year, day, success, part, solution, time):
+    date = dt.now().strftime("%Y-%m-%d %H:%M:%S")
+    if success:
+        with open(f'{year}/{day}/correct_results.txt', 'a') as f:            
+                f.write(f'Puzzle {year}/{day} Part {part} : Result for {date}\n')
+                f.write(f'Part{part} Answer: {solution}\n')
+                f.write(f'Execution Time: {time}ms\n\n')
+                f.close()  
+    else:
+         with open(f'{year}/{day}/incorrect_results.txt', 'a') as f:                
+                f.write(f'Puzzle {year}/{day} Part {part} : Failed Result for {date}\n')
+                f.write(f'Part{part} Incorrect Answer: {solution}\n')
+                f.write(f'Execution Time: {time}ms\n\n')
+                f.close()
 
-def submit(year, day, solution_file='solution'):
+def save_results_from_prompt(year, day):
+    
+    if not os.path.exists(f'{year}/{day}/prompt_results.txt'):
+        conf = config.get_config()
+        r = requests.get(f'https://adventofcode.com/{year}/day/{int(day)}',
+                    cookies={'session': conf['session_cookie']})
+
+        soup = BeautifulSoup(r.text, 'html.parser')
+        with open(f'{year}/{day}/prompt_results.txt', 'w') as f:
+            date = dt.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f'Puzzle {year}/{day} : Correct Answers retrieved from prompt on {date}\n')            
+            ps = soup.find_all('p')
+            part_id = 1
+            for p in ps:            
+                line = p.decode_contents()
+                if "Your puzzle answer was" in line:
+                    f.write(f"Part{part_id}: {line}\n")                    
+                    part_id += 1
+
+            f.write("\n\n")     
+            f.close()       
+
+def submit(year, day, solution_file='solution', part='0'):
+    # TODO: Check for previous failure or success
+    part = int(part)
+    if (year == None):
+        year = get_year()
+    if (day == None):
+        day = get_day()
 
     if not os.path.exists(f'{year}/{day}/'):
         print(colored('Directory does not exist:', 'red'))
@@ -259,7 +458,12 @@ def submit(year, day, solution_file='solution'):
             return
         print(colored(f'(Using {solution_file}.py)', 'red'))
 
-    part1_answer, part2_answer = compute_answers(year, day, solution_file=solution_file)
+    with open(f'{year}/{day}/input.txt', 'r') as f:
+        input = [
+            line.replace('\r', '').replace('\n', '') for line in f.readlines()
+        ]
+
+    part1_answer, part2_answer, part1_time, part2_time = compute_answers(year, day, input, solution_file=solution_file, part=part)
 
     status, response = None, None
     if part2_answer is not None:
@@ -277,8 +481,13 @@ def submit(year, day, solution_file='solution'):
         if part2_answer is not None:
             print(colored('**', 'yellow'))
             print(f'Day {int(day)} complete!')
+            record_result(year, day, True, 2, part2_answer, part2_time)
+            save_results_from_prompt(year, day)
+            
         elif part1_answer is not None:
             print(colored('*', 'cyan'))
+          
+            record_result(year, day, True, 1, part1_answer, part1_time)
             conf = config.get_config()
             r = requests.get(f'https://adventofcode.com/{year}/day/{int(day)}',
                              cookies={'session': conf['session_cookie']})
@@ -297,11 +506,18 @@ def submit(year, day, solution_file='solution'):
 
     elif status == Status.FAIL:
         print(colored('Incorrect!', 'red'))
+        if part2_answer is not None:
+            record_result(year, day, False, 2, part2_answer, part2_time)
+            
+        elif part1_answer is not None:
+            print(colored('*', 'cyan'))
+            record_result(year, day, False, 1, part1_answer, part1_time)
 
     elif status == Status.RATE_LIMIT:
         print(colored('Rate limited! Please wait before submitting again.', 'yellow'))
 
     elif status == Status.COMPLETED:
+        save_results_from_prompt(year, day)
         print(colored("You've already completed this question.", 'yellow'))
 
     elif status == Status.NOT_LOGGED_IN:

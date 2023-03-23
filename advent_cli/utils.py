@@ -15,7 +15,7 @@ from itertools import tee
 from copy import copy
 from collections.abc import Generator
 from termcolor import colored as tc_colored
-
+import time
 from . import config
 
 
@@ -40,23 +40,36 @@ def colored(text, color):
         return tc_colored(text, color)
 
 
-def compute_answers(year, day, solution_file='solution', example=False):
+def compute_answers(year, day, input, solution_file='solution', example=False, part = 0):
     sys.path.append(os.getcwd())
     solution = import_module(f'{year}.{day}.{solution_file}')
-    with open(f'{year}/{day}/{"example_" if example else ""}input.txt', 'r') as f:
-        data = solution.parse_input([
-            line.replace('\r', '').replace('\n', '') for line in f.readlines()
-        ])
-    if isinstance(data, Generator):
-        data1, data2 = tee(data)
+               
+    puzzle = solution.Puzzle(input, example)
+
+    #if isinstance(data, Generator):
+    #    data1, data2 = tee(data)
+    #else:
+    #    data1, data2 = copy(data), copy(data)
+    #if not isinstance(data, tuple):
+    #    data1 = (data1,)
+    #    data2 = (data2,)
+    if part == 2 and not puzzle.always_run_part_1:
+        part1_answer = None
+        part1_time = 0
     else:
-        data1, data2 = copy(data), copy(data)
-    if not isinstance(data, tuple):
-        data1 = (data1,)
-        data2 = (data2,)
-    part1_answer = solution.part1(*data1)
-    part2_answer = solution.part2(*data2)
-    return part1_answer, part2_answer
+        start = time.time()
+        part1_answer = puzzle.part1()
+        end = time.time()
+        part1_time = (end-start) * 10**3
+    if part == 1: 
+        part2_answer = None
+        part2_time = 0
+    else:
+        start = time.time()
+        part2_answer = puzzle.part2()
+        end = time.time()
+        part2_time = (end-start) * 10**3
+    return part1_answer, part2_answer, int(part1_time), int(part2_time)
 
 
 def submit_answer(year, day, level, answer):
