@@ -50,8 +50,7 @@ def load_configuration():
     if 'day' not in lconfig['DEFAULT']:
         lconfig['DEFAULT']['day'] = infer_day(lconfig['DEFAULT']['year'])
     lconfig.write(open('aoc_cli_config.ini', 'w'))
-    print("Year: " + lconfig['DEFAULT']['year'])
-    print("Day: " + lconfig['DEFAULT']['day'])
+    print(colored("Configured Day: " + lconfig['DEFAULT']['year'] + "/" + lconfig['DEFAULT']['day'], "grey"))    
     return lconfig
     
 
@@ -119,7 +118,8 @@ def get(year, day):
             return
         day += 1
         day = f'{day:02}'
-        
+
+    print(colored(f"Getting {year}/{day}", "yellow"))        
     set_day(day)
     
     
@@ -303,10 +303,40 @@ def private_leaderboard_stats(year):
         print(colored('Set the environment variable ADVENT_PRIV_BOARDS to '
                       'a comma-separated list of private leaderboard IDs.', 'red'))
 
+def check_and_print_result(part, solution, time, expected):
+    if solution is None:
+        return False
+    
+    if part == 1:
+        color = "cyan"
+    else:
+        color = "magenta"
+    failed = False
+    print(f'{colored("Part {} (Time: {}ms):".format(part, time), color)} {solution}')
+    if expected is not None:
+        if expected == str(solution):
+            print(f'{colored("Part {} Output {} matches expected {}".format(part, solution, expected), "green")}')
+        else:
+            failed = True
+            print(f'{colored("Part {} Output {} does NOT match expected {}".format(part, solution, expected), "red")}')
+    return failed
+
+def check_and_print_results(solution1, time1, expected1, solution2, time2, expected2):
+    if solution1 is None and solution2 is None:
+        print(colored('No solution implemented', 'red'))
+        return True
+    failed = False
+    failed = failed or check_and_print_result(1, solution1, time1, expected1)
+    failed = failed or check_and_print_result(2, solution2, time2, expected2)
+    return failed
 
 def test(year, day, solution_file='solution', example=False, part='0'):
+    print(colored(f"Testing {year}/{day}", "yellow"))    
     part = int(part)
-    print("Testing part ", part)
+    if part == 0:
+        print("\tTesting all parts")
+    else:
+        print("\tTesting part", part)
     if (year == None):
         year = get_year()
     if (day == None):
@@ -325,6 +355,7 @@ def test(year, day, solution_file='solution', example=False, part='0'):
         print(colored(f'(Using {solution_file}.py)', 'red'))
 
     if not example:
+
         with open(f'{year}/{day}/input.txt', 'r') as f:
             input = [
                 line.replace('\r', '').replace('\n', '') for line in f.readlines()
@@ -332,13 +363,9 @@ def test(year, day, solution_file='solution', example=False, part='0'):
         part1_answer, part2_answer, part1_time, part2_time = compute_answers(year, day, input,
                                                     solution_file=solution_file,
                                                     example=example, part=part)
-        if part1_answer is not None:
-            print(f'{colored("Part 1 (Time: {}ms):".format(part1_time), "cyan")} {part1_answer}')
-        if part2_answer is not None:
-            print(f'{colored("Part 2(Time: {}ms):".format(part2_time), "yellow")} {part2_answer}')
-        if part1_answer is None and part2_answer is None:
-            print(colored('No solution implemented', 'red'))
-            return
+        part1_expected, part2_expected = get_expected_from_from_saved(year, day)
+        check_and_print_results(part1_answer, part1_time, part1_expected, part2_answer, part2_time, part2_expected)
+
     else:
         path = f'{year}/{day}/'
         failed = False
@@ -369,25 +396,9 @@ def test(year, day, solution_file='solution', example=False, part='0'):
                                                     solution_file=solution_file,
                                                     example=example,
                                                     part = test_part)
-                if part1_answer is not None:
-                    print(f'{colored("Part 1 (Time: {}ms):".format(part1_time), "cyan")} {part1_answer}')
-                    if test_part == 1:
-                        if expected_result == str(part1_answer):
-                            print(f'{colored("Part 1 Output {} matches expected input {}".format(part1_answer, expected_result), "green")}')
-                        else:
-                            failed = True
-                            print(f'{colored("Part 2 Output {} does NOT match expected input {}".format(part1_answer, expected_result), "red")}')
-                            
-                elif test_part == 1:
-                    print(colored('No Solution implemented for part 1', 'red'))
-                if part2_answer is not None:
-                    print(f'{colored("Part 2(Time: {}ms):".format(part2_time), "yellow")} {part2_answer}')
-                    if test_part == 2:
-                        if expected_result == str(part2_answer):
-                            print(f'{colored("Part 2 Output {} matches expected input {}".format(part2_answer, expected_result), "green")}')
-                        else:
-                            failed = True
-                            print(f'{colored("Part 2 Output {} does NOT match expected input {}".format(part2_answer, expected_result), "red")}')
+                if (check_and_print_results(part1_answer, part1_time, expected_result, part2_answer, part2_time, expected_result)):
+                    failed = True
+                        
         if failed:
             print(colored('!!!!!TEST FAILED!!!!!', 'red'))
         else:
@@ -436,10 +447,37 @@ def save_results_from_prompt(year, day):
                     part_id += 1
 
             f.write("\n\n")     
-            f.close()       
+            f.close()   
+
+answer_re = re.compile(r'<code>(.*?)</code>')
+def get_expected_from_from_saved(year, day):
+    part1_answer = None
+    part2_answer = None
+    if os.path.exists(f'{year}/{day}/prompt_results.txt'):
+        with open(f'{year}/{day}/prompt_results.txt', 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                if f"Part1" in line:
+                    part1_answer = answer_re.findall(line)[0]
+                elif f"Part2" in line:
+                    part2_answer = answer_re.findall(line)[0]
+
+    elif os.path.exists(f'{year}/{day}/correct_results.txt'):
+        with open(f'{year}/{day}/correct_results.txt', 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                if f"Part1" in line:
+                    part1_answer = line.split(":")[1].strip()
+                elif f"Part2" in line:
+                    part2_answer = line.split(":")[1].strip()
+                    
+    return part1_answer, part2_answer
+    
+
 
 def submit(year, day, solution_file='solution', part='0'):
     # TODO: Check for previous failure or success
+    print(colored(f"Submit {year}/{day}", "yellow"))    
     part = int(part)
     if (year == None):
         year = get_year()
@@ -464,7 +502,9 @@ def submit(year, day, solution_file='solution', part='0'):
         ]
 
     part1_answer, part2_answer, part1_time, part2_time = compute_answers(year, day, input, solution_file=solution_file, part=part)
-
+    part1_expected, part2_expected = get_expected_from_from_saved(year, day)
+    check_and_print_results(part1_answer, part1_time, part1_expected, part2_answer, part2_time, part2_expected)
+    
     status, response = None, None
     if part2_answer is not None:
         print('Submitting part 2...')
