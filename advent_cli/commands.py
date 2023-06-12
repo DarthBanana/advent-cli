@@ -158,7 +158,7 @@ def get(year, day):
     part1_html = re.sub('--- (.*) ---', r'\1', part1_html)
 
     # also makes markdown look better
-    part1_html = part1_html.replace('\n\n', '\n')
+    #part1_html = part1_html.replace('\n\n', '\n')
 
     with open(f'{year}/{day}/prompt.md', 'w') as f:
         f.write(custom_markdownify(part1_html))
@@ -323,24 +323,27 @@ def check_and_print_result(part, solution, time, expected):
 
 def check_and_print_results(solution1, time1, expected1, solution2, time2, expected2):
     if solution1 is None and solution2 is None:
-        print(colored('No solution implemented', 'red'))
+        print(colored('No solution implemented', 'red'))        
         return True
     failed = False
     failed = failed or check_and_print_result(1, solution1, time1, expected1)
-    failed = failed or check_and_print_result(2, solution2, time2, expected2)
+    failed = failed or check_and_print_result(2, solution2, time2, expected2)    
+    
     return failed
 
 def test(year, day, solution_file='solution', example=False, part='0'):
+    if (year == None):
+        year = get_year()
+    if (day == None):
+        day = get_day()
+
     print(colored(f"Testing {year}/{day}", "yellow"))    
     part = int(part)
     if part == 0:
         print("\tTesting all parts")
     else:
         print("\tTesting part", part)
-    if (year == None):
-        year = get_year()
-    if (day == None):
-        day = get_day()
+    
 
     if not os.path.exists(f'{year}/{day}/'):
         print(colored('Directory does not exist:', 'red'))
@@ -388,6 +391,13 @@ def test(year, day, solution_file='solution', example=False, part='0'):
                 lines = f.readlines()                
                 lines.pop(0)
                 expected_result = lines.pop(0).strip()
+                if test_part == 1:
+                    expected_result1 = expected_result
+                    expected_result2 = None
+                else:
+                    expected_result2 = expected_result
+                    expected_result1 = None
+                
                 lines.pop(0)
                                 
                 input = [line.replace('\r', '').replace('\n', '') for line in lines]
@@ -396,7 +406,7 @@ def test(year, day, solution_file='solution', example=False, part='0'):
                                                     solution_file=solution_file,
                                                     example=example,
                                                     part = test_part)
-                if (check_and_print_results(part1_answer, part1_time, expected_result, part2_answer, part2_time, expected_result)):
+                if (check_and_print_results(part1_answer, part1_time, expected_result1, part2_answer, part2_time, expected_result2)):
                     failed = True
                         
         if failed:
@@ -477,12 +487,14 @@ def get_expected_from_from_saved(year, day):
 
 def submit(year, day, solution_file='solution', part='0'):
     # TODO: Check for previous failure or success
-    print(colored(f"Submit {year}/{day}", "yellow"))    
+
     part = int(part)
     if (year == None):
         year = get_year()
     if (day == None):
         day = get_day()
+
+    print(colored(f"Submit {year}/{day}", "yellow"))    
 
     if not os.path.exists(f'{year}/{day}/'):
         print(colored('Directory does not exist:', 'red'))
@@ -538,7 +550,7 @@ def submit(year, day, solution_file='solution', part='0'):
             part2_html = re.sub('--- (.*) ---', r'\1', part2_html)
 
             # also makes markdown look better
-            part2_html = part2_html.replace('\n\n', '\n')
+            #part2_html = part2_html.replace('\n\n', '\n')
 
             with open(f'{year}/{day}/prompt.md', 'a') as f:
                 f.write(custom_markdownify(part2_html))

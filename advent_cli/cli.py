@@ -124,8 +124,9 @@ def main():
         help='the day in DD format (e.g. "03")'
     )
     args = parser.parse_args()
-
+    print()
     if args.command == 'get':
+        
         if args.date:
             year, day = args.date.split('/')
             commands.get(year, day)
@@ -159,3 +160,4 @@ def main():
         commands.set_year(args.year)
     elif args.command == 'day':
         commands.set_day(args.day)
+    print()
